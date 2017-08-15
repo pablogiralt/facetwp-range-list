@@ -215,7 +215,7 @@ class FacetWP_Facet_Range_List_Addon {
     ?>
     <style type="text/css">
     .facet-level-row {
-        padding-bottom: 5px;
+        padding-bottom: 10px;
     }
 
     .facet-level-row input[type="number"],
