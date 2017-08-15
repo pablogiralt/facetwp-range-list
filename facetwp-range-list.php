@@ -295,7 +295,11 @@ class FacetWP_Facet_Range_List_Addon {
                             if( typeof min === 'number' && typeof max === 'number' ){
                                 sep = ' - ';
                             }
-                            label.val(min + sep + max);
+                            if( typeof min !== 'string' || typeof max !== 'string' ) {
+                                label.val(min + sep + max);
+                            }else{
+                                label.val('');
+                            }
                         }
                     })
                 }
