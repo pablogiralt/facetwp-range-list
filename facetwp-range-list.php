@@ -256,11 +256,11 @@ class FacetWP_Facet_Range_List_Addon {
                 function find_loweset($row) {
                     var prev_row = $row.parent().prev().find('.facet-level-row'),
                         lower = prev_row.find('.facet-max-level'),
-                        val = 'Up';
+                        val = 'Up to';
 
                     if (prev_row.length) {
                         if (lower.val().length) {
-                            val = lower.val();
+                            val = parseFloat( lower.val() );
                         } else {
                             val = find_loweset(prev_row);
                         }
@@ -271,11 +271,11 @@ class FacetWP_Facet_Range_List_Addon {
                 function find_highest($row) {
                     var next_row = $row.parent().next().find('.facet-level-row'),
                         upper = next_row.find('.facet-min-level'),
-                        val = ' and Up';
+                        val = 'and Up';
 
                     if (next_row.length) {
                         if (upper.val().length) {
-                            val = ' - ' + upper.val();
+                            val = parseFloat( upper.val() );
                         } else {
                             val = find_highest(next_row);
                         }
@@ -287,11 +287,15 @@ class FacetWP_Facet_Range_List_Addon {
                     var rows = $this.find('.facet-level-row');
                     rows.each(function () {
                         var row = $(this),
+                            sep = ' ',
                             label = row.find('.facet-label'),
-                            min = row.find('.facet-min-level').val().length ? row.find('.facet-min-level').val() : find_loweset(row),
-                            max = row.find('.facet-max-level').val().length ? ' - ' + row.find('.facet-max-level').val() : find_highest(row);
+                            min = row.find('.facet-min-level').val().length ? parseFloat( row.find('.facet-min-level').val() ) : find_loweset(row),
+                            max = row.find('.facet-max-level').val().length ? parseFloat( row.find('.facet-max-level').val() ) : find_highest(row);
                         if (!label.data('label')) {
-                            label.val(min + max)
+                            if( typeof min === 'number' && typeof max === 'number' ){
+                                sep = ' - ';
+                            }
+                            label.val(min + sep + max);
                         }
                     })
                 }
