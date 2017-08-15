@@ -157,17 +157,18 @@ class FacetWP_Facet_Range_List_Addon {
                 $auto_display = implode(' - ', $result['set'] );
                 $value = implode('-', $result['set'] );
             }
-            elseif( empty( $result['set']['min'] ) && ! empty( $result['set']['max'] ) ) {
+            elseif ( empty( $result['set']['min'] ) && ! empty( $result['set']['max'] ) ) {
                 $auto_display = 'Up to ' . $result['set']['max'];
                 $value = '0-' . $result['set']['max'];
             }
             elseif ( ! empty($result['set']['min'] ) && empty( $result['set']['max'] ) ) {
                 $auto_display = $result['set']['min'] . ' and up';
-                $value = $result['set']['min'] .'+';
+                $value = $result['set']['min'] . '+';
             }
             else {
                 $auto_display = 'All';
             }
+
             if ( is_null( $display ) ) {
                 $display = $auto_display;
             }
@@ -211,166 +212,144 @@ class FacetWP_Facet_Range_List_Addon {
      * Output any admin scripts
      */
     function admin_scripts() {
-        ?>
-        <script>
-            (function ($) {
-                wp.hooks.addAction('facetwp/load/range_list', function($this, obj) {
-                    $this.find('.facet-source').val(obj.source);
-                    var wrap = $this.find('.range-list-add-level-wrap');
-                    for (var l = 0; l < obj.levels.length; l++) {
-                        create_label($this, obj.levels[l]);
-                    }
-                    if (0 === obj.levels.length) {
-                        create_label($this);
-                    }
-                    $this.find('.range-list-level:first .button').remove();
-                    update_labels($this);
-                });
+    ?>
+    <style type="text/css">
+    .facet-level-row {
+        padding-bottom: 5px;
+    }
 
-                wp.hooks.addFilter('facetwp/save/range_list', function(obj, $this) {
-                    obj['source'] = $this.find('.facet-source').val();
-                    obj['hierarchical'] = 'yes'; // locked
-                    obj['operator'] = 'or'; // locked
-                    obj['levels'] = [];
-                    $this.find('.facet-level-row').each(function() {
-                        var level = $(this),
-                            row = {
-                                'min': level.find('.facet-min-level').val(),
-                                'max': level.find('.facet-max-level').val(),
-                                'label': level.find('.facet-label').data('label'),
-                            };
-                        obj['levels'].push(row);
-                    });
+    .facet-level-row input[type="number"],
+    .facet-level-row input[type="text"] {
+        height: 28px;
+    }
+    </style>
 
-                    return obj;
-                });
+    <script>
+    (function ($) {
+        wp.hooks.addAction('facetwp/load/range_list', function($this, obj) {
+            $this.find('.facet-source').val(obj.source);
 
-                function create_label($table, val) {
-                    var $target = $table.find('.range-list-add-level-wrap');
-                    var clone = $('#range-list-tpl').html();
+            for (var l = 0; l < obj.levels.length; l++) {
+                create_label($this, obj.levels[l]);
+            }
+        });
 
-                    var num_labels = $table.find('.range-list-level').length + 1;
-                    clone = clone.replace('{n}', num_labels);
+        wp.hooks.addFilter('facetwp/save/range_list', function(obj, $this) {
+            obj['source'] = $this.find('.facet-source').val();
+            obj['operator'] = 'or'; // locked
+            obj['levels'] = [];
+            $this.find('.facet-level-row').each(function() {
+                var level = $(this);
+                var row = {
+                    'min': level.find('.facet-range-list-min').val(),
+                    'max': level.find('.facet-range-list-max').val(),
+                    'label': level.find('.facet-range-list-label').val(),
+                };
+                obj['levels'].push(row);
+            });
 
-                    var $tpl = $(clone);
+            return obj;
+        });
 
-                    if (val) {
-                        $tpl.find('.facet-min-level').val(val.min);
-                        $tpl.find('.facet-max-level').val(val.max);
-                        if (val.label && val.label.length > 0) {
-                            $tpl.find('.facet-label').val(val.label).data('label', val.label);
-                        }
-                    }
+        function create_label($table, val) {
+            var clone = $('#range-list-tpl').html();
+            var $tpl = $(clone);
 
-                    $tpl.insertBefore($target);
+            if (val) {
+                $tpl.find('.facet-range-list-min').val(val.min);
+                $tpl.find('.facet-range-list-max').val(val.max);
+                $tpl.find('.facet-range-list-label').val(val.label);
+
+                if ('' == val.label) {
+                    $tpl.attr('autoLabel', true);
                 }
+            }
 
-                function find_loweset($row) {
-                    var prev_row = $row.parent().prev().find('.facet-level-row'),
-                        lower = prev_row.find('.facet-max-level'),
-                        val = 'Up to';
+            $table.find('.facet-range-list').append($tpl);
+        }
 
-                    if (prev_row.length) {
-                        if (lower.val().length) {
-                            val = parseFloat( lower.val() );
-                        }
-                        else {
-                            val = find_loweset(prev_row);
-                        }
+        function find_lowest($row) {
+            var prev_row = $row.prev(),
+                lower = prev_row.find('.facet-range-list-max'),
+                val = 'Up to';
+
+            if (prev_row.length) {
+                val = lower.val().length ? parseFloat( lower.val() ) : find_lowest(prev_row);
+            }
+
+            return val;
+        }
+
+        function find_highest($row) {
+            var next_row = $row.next(),
+                upper = next_row.find('.facet-range-list-min'),
+                val = 'and Up';
+
+            if (next_row.length) {
+                val = upper.val().length ? parseFloat( upper.val() ) : find_highest(next_row);
+            }
+
+            return val;
+        }
+
+        function update_labels($this) {
+            $this.find('.facet-level-row').each(function() {
+                var row = $(this),
+                    sep = ' ',
+                    label = row.find('.facet-range-list-label'),
+                    min = row.find('.facet-range-list-min').val().length ? parseFloat( row.find('.facet-range-list-min').val() ) : find_lowest(row),
+                    max = row.find('.facet-range-list-max').val().length ? parseFloat( row.find('.facet-range-list-max').val() ) : find_highest(row);
+
+                if (row.is('[autoLabel]')) {
+                    if (typeof min === 'number' && typeof max === 'number') {
+                        sep = ' - ';
                     }
-                    return val;
-                }
-
-                function find_highest($row) {
-                    var next_row = $row.parent().next().find('.facet-level-row'),
-                        upper = next_row.find('.facet-min-level'),
-                        val = 'and Up';
-
-                    if (next_row.length) {
-                        if (upper.val().length) {
-                            val = parseFloat( upper.val() );
-                        }
-                        else {
-                            val = find_highest(next_row);
-                        }
-                    }
-                    return val;
-                }
-
-                function update_labels($this) {
-                    var rows = $this.find('.facet-level-row');
-                    rows.each(function () {
-                        var row = $(this),
-                            sep = ' ',
-                            label = row.find('.facet-label'),
-                            min = row.find('.facet-min-level').val().length ? parseFloat( row.find('.facet-min-level').val() ) : find_loweset(row),
-                            max = row.find('.facet-max-level').val().length ? parseFloat( row.find('.facet-max-level').val() ) : find_highest(row);
-
-                        if (! label.data('label')) {
-                            if (typeof min === 'number' && typeof max === 'number') {
-                                sep = ' - ';
-                            }
-                            if (typeof min !== 'string' || typeof max !== 'string') {
-                                label.val(min + sep + max);
-                            }
-                            else {
-                                label.val('');
-                            }
-                        }
-                    })
-                }
-
-                $(document).on('click', '.range-list-add-level', function() {
-                    var $table = $(this).closest('.facet-fields');
-                    create_label($table);
-                    update_labels($(this).closest('.facetwp-row'));
-
-                });
-                $(document).on('click', '.range-list-remove-level', function() {
-                    $(this).closest('.range-list-level').remove();
-                });
-                $(document).on('input', '.facet-label', function() {
-                    var label = $(this);
-                    if (label.val().length > 0) {
-                        label.data('label', label.val());
+                    if (typeof min !== 'string' || typeof max !== 'string') {
+                        label.val(min + sep + max);
                     }
                     else {
-                        label.data('label', false);
+                        label.val('');
                     }
-                });
-                $(document).on('input', '.facet-min-level, .facet-max-level', function () {
-                    update_labels($(this).closest('.facetwp-row'));
-                });
-            })(jQuery);
-        </script>
-        <script type="text/html" id="range-list-tpl">
-            <tr class="range-list-level">
-                <td>
-                    <span class="facetwp-changeme"><?php _e( "Range {n}", 'fwp' ); ?></span>:
-                    <div class="facetwp-tooltip">
-                        <span class="icon-question">?</span>
-                        <div class="facetwp-tooltip-content">
-                            Customize this range.
-                        </div>
-                    </div>
-                </td>
-                <td class="facet-level-row">
-                    <input type="number" class="facet-min-level" value=""
-                        placeholder="<?php esc_attr_e( 'Min Value', 'fwp' ); ?>"
-                        style="width: 115px;"/>
-                    <input type="number" class="facet-max-level" value=""
-                        placeholder="<?php esc_attr_e( 'Max Value', 'fwp' ); ?>"
-                        style="width: 115px;"/>
-                    <input type="text" class="facet-label" value=""
-                        placeholder="<?php esc_attr_e( 'Label', 'fwp' ); ?>"
-                        style="width: 115px;"/>
-                    <input type="button" class="button range-list-remove-level"
-                        style="margin: 1px;"
-                        value="<?php esc_attr_e( 'Remove', 'fwp' ); ?>"/>
-                </td>
-            </tr>
-        </script>
-        <?php
+                }
+            })
+        }
+
+        $(document).on('click', '.facet-range-list-add', function() {
+            create_label($(this).closest('.facet-fields'));
+            update_labels($(this).closest('.facet-range-list'));
+
+        });
+
+        $(document).on('click', '.facet-range-list-remove', function() {
+            $(this).closest('.facet-level-row').remove();
+        });
+
+        $(document).on('input', '.facet-range-list-label', function() {
+            $(this).closest('.facet-level-row').removeAttr('autoLabel');
+        });
+
+        $(document).on('input', '.facet-range-list-min, .facet-range-list-max', function() {
+            update_labels($(this).closest('.facet-range-list'));
+        });
+    })(jQuery);
+    </script>
+    <script type="text/html" id="range-list-tpl">
+        <div class="facet-level-row">
+            <input type="number" class="facet-range-list-min" value=""
+                placeholder="<?php esc_attr_e( 'Min Value', 'fwp' ); ?>"
+                style="width: 115px;"/>
+            <input type="number" class="facet-range-list-max" value=""
+                placeholder="<?php esc_attr_e( 'Max Value', 'fwp' ); ?>"
+                style="width: 115px;"/>
+            <input type="text" class="facet-range-list-label" value=""
+                placeholder="<?php esc_attr_e( 'Label', 'fwp' ); ?>"
+                style="width: 115px;"/>
+            <input type="button" class="button facet-range-list-remove"
+                style="margin: 1px;"
+                value="<?php esc_attr_e( 'Remove', 'fwp' ); ?>"/>
+        </div>
+    </script>
+    <?php
     }
 
 
@@ -378,42 +357,42 @@ class FacetWP_Facet_Range_List_Addon {
      * Output any front-end scripts
      */
     function front_scripts() {
-        ?>
-        <script>
-            (function ($) {
+    ?>
+    <script>
+    (function ($) {
 
-                wp.hooks.addAction('facetwp/refresh/range_list', function ($this, facet_name) {
-                    var selected_values = [];
-                    $this.find('.facetwp-radio.checked').each(function () {
-                        selected_values.push($(this).attr('data-value'));
-                    });
-                    FWP.facets[facet_name] = selected_values;
-                });
+        wp.hooks.addAction('facetwp/refresh/range_list', function ($this, facet_name) {
+            var selected_values = [];
+            $this.find('.facetwp-radio.checked').each(function () {
+                selected_values.push($(this).attr('data-value'));
+            });
+            FWP.facets[facet_name] = selected_values;
+        });
 
-                wp.hooks.addFilter('facetwp/selections/range_list', function (output, params) {
-                    var choices = [];
-                    $.each(params.selected_values, function (idx, val) {
-                        var choice = params.el.find('.facetwp-radio[data-value="' + val + '"]').clone();
-                        choice.find('.facetwp-counter').remove();
-                        choices.push({
-                            value: val,
-                            label: choice.text()
-                        });
-                    });
-                    return choices;
+        wp.hooks.addFilter('facetwp/selections/range_list', function (output, params) {
+            var choices = [];
+            $.each(params.selected_values, function (idx, val) {
+                var choice = params.el.find('.facetwp-radio[data-value="' + val + '"]').clone();
+                choice.find('.facetwp-counter').remove();
+                choices.push({
+                    value: val,
+                    label: choice.text()
                 });
+            });
+            return choices;
+        });
 
-                $(document).on('click', '.facetwp-type-range_list .facetwp-radio:not(.disabled)', function () {
-                    var is_checked = $(this).hasClass('checked');
-                    $(this).closest('.facetwp-facet').find('.facetwp-radio').removeClass('checked');
-                    if (!is_checked) {
-                        $(this).addClass('checked');
-                    }
-                    FWP.autoload();
-                });
-            })(jQuery);
-        </script>
-        <?php
+        $(document).on('click', '.facetwp-type-range_list .facetwp-radio:not(.disabled)', function () {
+            var is_checked = $(this).hasClass('checked');
+            $(this).closest('.facetwp-facet').find('.facetwp-radio').removeClass('checked');
+            if (!is_checked) {
+                $(this).addClass('checked');
+            }
+            FWP.autoload();
+        });
+    })(jQuery);
+    </script>
+    <?php
     }
 
 
@@ -422,11 +401,12 @@ class FacetWP_Facet_Range_List_Addon {
      */
     function settings_html() {
         ?>
-        <tr class="range-list-add-level-wrap">
-            <td></td>
+        <tr>
+            <td><?php _e( 'Ranges', 'fwp' ); ?>:</td>
             <td>
+                <div class="facet-range-list"></div>
                 <input type="button"
-                    class="range-list-add-level button button-small"
+                    class="facet-range-list-add button button-small"
                     style="width: 200px;"
                     value="<?php esc_attr_e( 'Add Range', 'fwp' ); ?>"/>
             </td>
