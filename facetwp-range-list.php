@@ -259,10 +259,10 @@ class FacetWP_Facet_Range_List_Addon {
                 $tpl.find('.facet-range-list-min').val(val.min);
                 $tpl.find('.facet-range-list-max').val(val.max);
                 $tpl.find('.facet-range-list-label').val(val.label);
+            }
 
-                if ('' == val.label) {
-                    $tpl.attr('autoLabel', true);
-                }
+            if (! val || '' == val.label) {
+                $tpl.attr('autoLabel', true);
             }
 
             $table.find('.facet-range-list').append($tpl);
