@@ -14,9 +14,9 @@ defined( 'ABSPATH' ) or exit;
  * FacetWP registration hook
  */
 add_filter( 'facetwp_facet_types', function ( $facet_types ) {
-	$facet_types['range_list'] = new FacetWP_Facet_Range_List_Addon();
+    $facet_types['range_list'] = new FacetWP_Facet_Range_List_Addon();
 
-	return $facet_types;
+    return $facet_types;
 } );
 
 
@@ -25,183 +25,196 @@ add_filter( 'facetwp_facet_types', function ( $facet_types ) {
  */
 class FacetWP_Facet_Range_List_Addon {
 
-	function __construct() {
-		$this->label = __( 'Range List', 'fwp' );
-	}
+    function __construct() {
+        $this->label = __( 'Range List', 'fwp' );
+    }
 
 
-	/**
-	 * Load the available choices
-	 */
-	function load_values( $params ) {
-		global $wpdb;
+    /**
+     * Load the available choices
+     */
+    function load_values( $params ) {
+        global $wpdb;
 
-		$facet = $params['facet'];
+        $facet = $params['facet'];
 
-		// Apply filtering (ignore the facet's current selection)
-		if ( isset( FWP()->or_values ) && ( 1 < count( FWP()->or_values ) || ! isset( FWP()->or_values[ $facet['name'] ] ) ) ) {
-			$post_ids  = array();
-			$or_values = FWP()->or_values; // Preserve the original
-			unset( $or_values[ $facet['name'] ] );
+        // Apply filtering (ignore the facet's current selection)
+        if ( isset( FWP()->or_values ) && ( 1 < count( FWP()->or_values ) || ! isset( FWP()->or_values[ $facet['name'] ] ) ) ) {
+            $post_ids  = array();
+            $or_values = FWP()->or_values; // Preserve the original
+            unset( $or_values[ $facet['name'] ] );
 
-			$counter = 0;
-			foreach ( $or_values as $name => $vals ) {
-				$post_ids = ( 0 == $counter ) ? $vals : array_intersect( $post_ids, $vals );
-				$counter ++;
-			}
+            $counter = 0;
+            foreach ( $or_values as $name => $vals ) {
+                $post_ids = ( 0 == $counter ) ? $vals : array_intersect( $post_ids, $vals );
+                $counter ++;
+            }
 
-			// Return only applicable results
-			$post_ids = array_intersect( $post_ids, FWP()->unfiltered_post_ids );
-		} else {
-			$post_ids = FWP()->unfiltered_post_ids;
-		}
+            // Return only applicable results
+            $post_ids = array_intersect( $post_ids, FWP()->unfiltered_post_ids );
+        }
+        else {
+            $post_ids = FWP()->unfiltered_post_ids;
+        }
 
-		$post_ids     = empty( $post_ids ) ? array( 0 ) : $post_ids;
-		$where_clause = ' AND post_id IN (' . implode( ',', $post_ids ) . ')';
-		$from_clause  = $wpdb->prefix . 'facetwp_index f';
+        $post_ids     = empty( $post_ids ) ? array( 0 ) : $post_ids;
+        $where_clause = ' AND post_id IN (' . implode( ',', $post_ids ) . ')';
+        $from_clause  = $wpdb->prefix . 'facetwp_index f';
 
-		$from_clause  = apply_filters( 'facetwp_facet_from', $from_clause, $facet );
-		$where_clause = apply_filters( 'facetwp_facet_where', $where_clause, $facet );
+        $from_clause  = apply_filters( 'facetwp_facet_from', $from_clause, $facet );
+        $where_clause = apply_filters( 'facetwp_facet_where', $where_clause, $facet );
 
-		$sql = "
+        $sql = "
         SELECT f.facet_value, f.post_id
         FROM $from_clause
         WHERE f.facet_name = '{$facet['name']}' $where_clause";
 
-		$results = $wpdb->get_results( $sql, ARRAY_A );
-		$output  = array();
-		//sort( $params['facet']['levels'] );
-		// build groups.
-		foreach ( $params['facet']['levels'] as $level => $setting ) {
-			$min      = $this->get_range_value( 'min', $level, 'down', $params['facet']['levels'] );
-			$max      = $this->get_range_value( 'max', $level, 'up', $params['facet']['levels'] );
-			$label    = ( isset( $setting['label'] ) ? $setting['label'] : null );
-			$output[] = array(
-				'set'     => array(
-					'min' => $min,
-					'max' => $max,
-				),
-				'label'   => $label,
-				'counter' => $this->get_counts( $results, $min, $max ),
-			);
-		}
+        $results = $wpdb->get_results( $sql, ARRAY_A );
+        $output  = array();
 
-		return $output;
-	}
+        // Build groups
+        foreach ( $params['facet']['levels'] as $level => $setting ) {
+            $min      = $this->get_range_value( 'min', $level, 'down', $params['facet']['levels'] );
+            $max      = $this->get_range_value( 'max', $level, 'up', $params['facet']['levels'] );
+            $label    = ( isset( $setting['label'] ) ? $setting['label'] : null );
+            $output[] = array(
+                'set'     => array(
+                    'min' => $min,
+                    'max' => $max,
+                ),
+                'label'   => $label,
+                'counter' => $this->get_counts( $results, $min, $max ),
+            );
+        }
 
-	/**
-	 * get the lowest value;
-	 */
-	function get_range_value( $type, $level, $direction, $levels ) {
-		$val = null;
-		if ( ! empty( $levels[ $level ][ $type ] ) ) {
-			$val = $levels[ $level ][ $type ];
-		} elseif ( $level > 0 && $level < count( $levels ) ) {
-			if ( $type === 'min' ) {
-				$type = 'max';
-			} else {
-				$type = 'min';
-			}
-			if ( $direction === 'up' ) {
-				$level = $level + 1;
-			} else {
-				$level = $level - 1;
-			}
-			$val = $this->get_range_value( $type, $level, $direction, $levels );
-		}
-
-		return $val;
-	}
+        return $output;
+    }
 
 
-	/**
-	 * Filter out irrelevant choices
-	 */
-	function get_counts( $results, $start, $end ) {
-		$count = 0;// array();
+    /**
+     * Get the lowest value
+     */
+    function get_range_value( $type, $level, $direction, $levels ) {
+        $val = null;
+        if ( ! empty( $levels[ $level ][ $type ] ) ) {
+            $val = $levels[ $level ][ $type ];
+        }
+        elseif ( $level > 0 && $level < count( $levels ) ) {
+            if ( $type === 'min' ) {
+                $type = 'max';
+            } else {
+                $type = 'min';
+            }
 
-		foreach ( $results as $result ) {
-			if ( $result['facet_value'] >= $start ) {
-				if ( is_null( $end ) || $result['facet_value'] <= $end ) {
-					$count += 1;//$result;//+= 1;// (int) $result['counter'];
-				}
-			}
-		}
+            if ( $direction === 'up' ) {
+                $level = $level + 1;
+            } else {
+                $level = $level - 1;
+            }
 
-		return $count;
-	}
+            $val = $this->get_range_value( $type, $level, $direction, $levels );
+        }
 
-	/**
-	 * Generate the facet HTML
-	 */
-	function render( $params ) {
+        return $val;
+    }
 
-		$output          = '';
-		$values          = (array) $params['values'];
-		$selected_values = (array) $params['selected_values'];
-		if ( ! empty( $selected_values ) ) {
-			$selected_value = $selected_values[0];
-		}
 
-		foreach ( $values as $key => $result ) {
+    /**
+     * Filter out irrelevant choices
+     */
+    function get_counts( $results, $start, $end ) {
+        $count = 0;
 
-			$display = $result['label'];
-			if( !empty($result['set']['min'] ) && !empty($result['set']['max'] )){
-				$auto_display = implode(' - ', $result['set'] );
-				$value = implode('-', $result['set'] );
-			} elseif( empty($result['set']['min'] ) && !empty($result['set']['max'] )){
-				$auto_display = 'Up to ' . $result['set']['max'];
-				$value = '0-' . $result['set']['max'];
-			} elseif( !empty($result['set']['min'] ) && empty($result['set']['max'] )){
-				$auto_display = $result['set']['min'] . ' and up';
-				$value = $result['set']['min'] .'+';
-			}else{
-				$auto_display = 'All';
-			}
-			if ( is_null( $display ) ) {
+        foreach ( $results as $result ) {
+            if ( $result['facet_value'] >= $start ) {
+                if ( is_null( $end ) || $result['facet_value'] <= $end ) {
+                    $count += 1;
+                }
+            }
+        }
+
+        return $count;
+    }
+
+
+    /**
+     * Generate the facet HTML
+     */
+    function render( $params ) {
+
+        $output = '';
+        $values = (array) $params['values'];
+        $selected_values = (array) $params['selected_values'];
+
+        if ( ! empty( $selected_values ) ) {
+            $selected_value = $selected_values[0];
+        }
+
+        foreach ( $values as $key => $result ) {
+            $display = $result['label'];
+
+            if( ! empty($result['set']['min'] ) && ! empty( $result['set']['max'] ) ) {
+                $auto_display = implode(' - ', $result['set'] );
+                $value = implode('-', $result['set'] );
+            }
+            elseif( empty( $result['set']['min'] ) && ! empty( $result['set']['max'] ) ) {
+                $auto_display = 'Up to ' . $result['set']['max'];
+                $value = '0-' . $result['set']['max'];
+            }
+            elseif ( ! empty($result['set']['min'] ) && empty( $result['set']['max'] ) ) {
+                $auto_display = $result['set']['min'] . ' and up';
+                $value = $result['set']['min'] .'+';
+            }
+            else {
+                $auto_display = 'All';
+            }
+            if ( is_null( $display ) ) {
                 $display = $auto_display;
-			}
-			$selected = ( $value === $selected_value ) ? ' checked' : '';
-			$selected .= ( 0 == $result['counter'] && '' == $selected ) ? ' disabled' : '';
-			$output   .= '<div class="facetwp-radio' . $selected . '" data-value="' . esc_attr( $value ) . '">';
-			$output   .= esc_html( $display ) . ' <span class="facetwp-counter">(' . $result['counter'] . ')</span>';
-			$output   .= '</div>';
-		}
+            }
 
-		return $output;
-	}
+            $selected = ( $value === $selected_value ) ? ' checked' : '';
+            $selected .= ( 0 == $result['counter'] && '' == $selected ) ? ' disabled' : '';
+            $output .= '<div class="facetwp-radio' . $selected . '" data-value="' . esc_attr( $value ) . '">';
+            $output .= esc_html( $display ) . ' <span class="facetwp-counter">(' . $result['counter'] . ')</span>';
+            $output .= '</div>';
+        }
+
+        return $output;
+    }
 
 
-	/**
-	 * Filter the query based on selected values
-	 */
-	function filter_posts( $params ) {
-		global $wpdb;
+    /**
+     * Filter the query based on selected values
+     */
+    function filter_posts( $params ) {
+        global $wpdb;
 
-		$facet           = $params['facet'];
-		$selected_values = $params['selected_values'];
-		$selected_values = array_pop( $selected_values );
-		$selected_values = explode( '-', $selected_values );
-		$selected_values = array_map( 'floatval', $selected_values );
-		$sql             = "
+        $facet = $params['facet'];
+        $selected_values = $params['selected_values'];
+        $selected_values = array_pop( $selected_values );
+        $selected_values = explode( '-', $selected_values );
+        $selected_values = array_map( 'floatval', $selected_values );
+
+        $sql = "
         SELECT DISTINCT post_id FROM {$wpdb->prefix}facetwp_index
         WHERE facet_name = '{$facet['name']}' AND facet_value > $selected_values[0]";
-		if ( ! empty( $selected_values[1] ) ) {
-			$sql .= " AND facet_value < $selected_values[1] ";
-		}
 
-		return facetwp_sql( $sql, $facet );
-	}
+        if ( ! empty( $selected_values[1] ) ) {
+            $sql .= " AND facet_value < $selected_values[1] ";
+        }
+
+        return facetwp_sql( $sql, $facet );
+    }
 
 
-	/**
-	 * Output any admin scripts
-	 */
-	function admin_scripts() {
-		?>
+    /**
+     * Output any admin scripts
+     */
+    function admin_scripts() {
+        ?>
         <script>
             (function ($) {
-                wp.hooks.addAction('facetwp/load/range_list', function ($this, obj) {
+                wp.hooks.addAction('facetwp/load/range_list', function($this, obj) {
                     $this.find('.facet-source').val(obj.source);
                     var wrap = $this.find('.range-list-add-level-wrap');
                     for (var l = 0; l < obj.levels.length; l++) {
@@ -214,12 +227,12 @@ class FacetWP_Facet_Range_List_Addon {
                     update_labels($this);
                 });
 
-                wp.hooks.addFilter('facetwp/save/range_list', function (obj, $this) {
+                wp.hooks.addFilter('facetwp/save/range_list', function(obj, $this) {
                     obj['source'] = $this.find('.facet-source').val();
                     obj['hierarchical'] = 'yes'; // locked
                     obj['operator'] = 'or'; // locked
                     obj['levels'] = [];
-                    $this.find('.facet-level-row').each(function () {
+                    $this.find('.facet-level-row').each(function() {
                         var level = $(this),
                             row = {
                                 'min': level.find('.facet-min-level').val(),
@@ -233,7 +246,6 @@ class FacetWP_Facet_Range_List_Addon {
                 });
 
                 function create_label($table, val) {
-
                     var $target = $table.find('.range-list-add-level-wrap');
                     var clone = $('#range-list-tpl').html();
 
@@ -261,7 +273,8 @@ class FacetWP_Facet_Range_List_Addon {
                     if (prev_row.length) {
                         if (lower.val().length) {
                             val = parseFloat( lower.val() );
-                        } else {
+                        }
+                        else {
                             val = find_loweset(prev_row);
                         }
                     }
@@ -276,7 +289,8 @@ class FacetWP_Facet_Range_List_Addon {
                     if (next_row.length) {
                         if (upper.val().length) {
                             val = parseFloat( upper.val() );
-                        } else {
+                        }
+                        else {
                             val = find_highest(next_row);
                         }
                     }
@@ -291,33 +305,36 @@ class FacetWP_Facet_Range_List_Addon {
                             label = row.find('.facet-label'),
                             min = row.find('.facet-min-level').val().length ? parseFloat( row.find('.facet-min-level').val() ) : find_loweset(row),
                             max = row.find('.facet-max-level').val().length ? parseFloat( row.find('.facet-max-level').val() ) : find_highest(row);
-                        if (!label.data('label')) {
-                            if( typeof min === 'number' && typeof max === 'number' ){
+
+                        if (! label.data('label')) {
+                            if (typeof min === 'number' && typeof max === 'number') {
                                 sep = ' - ';
                             }
-                            if( typeof min !== 'string' || typeof max !== 'string' ) {
+                            if (typeof min !== 'string' || typeof max !== 'string') {
                                 label.val(min + sep + max);
-                            }else{
+                            }
+                            else {
                                 label.val('');
                             }
                         }
                     })
                 }
 
-                $(document).on('click', '.range-list-add-level', function () {
+                $(document).on('click', '.range-list-add-level', function() {
                     var $table = $(this).closest('.facet-fields');
                     create_label($table);
                     update_labels($(this).closest('.facetwp-row'));
 
                 });
-                $(document).on('click', '.range-list-remove-level', function () {
+                $(document).on('click', '.range-list-remove-level', function() {
                     $(this).closest('.range-list-level').remove();
                 });
-                $(document).on('input', '.facet-label', function () {
+                $(document).on('input', '.facet-label', function() {
                     var label = $(this);
                     if (label.val().length > 0) {
                         label.data('label', label.val());
-                    } else {
+                    }
+                    else {
                         label.data('label', false);
                     }
                 });
@@ -339,29 +356,29 @@ class FacetWP_Facet_Range_List_Addon {
                 </td>
                 <td class="facet-level-row">
                     <input type="number" class="facet-min-level" value=""
-                           placeholder="<?php esc_attr_e( 'Min Value', 'fwp' ); ?>"
-                           style="width: 115px;"/>
+                        placeholder="<?php esc_attr_e( 'Min Value', 'fwp' ); ?>"
+                        style="width: 115px;"/>
                     <input type="number" class="facet-max-level" value=""
-                           placeholder="<?php esc_attr_e( 'Max Value', 'fwp' ); ?>"
-                           style="width: 115px;"/>
+                        placeholder="<?php esc_attr_e( 'Max Value', 'fwp' ); ?>"
+                        style="width: 115px;"/>
                     <input type="text" class="facet-label" value=""
-                           placeholder="<?php esc_attr_e( 'Label', 'fwp' ); ?>"
-                           style="width: 115px;"/>
+                        placeholder="<?php esc_attr_e( 'Label', 'fwp' ); ?>"
+                        style="width: 115px;"/>
                     <input type="button" class="button range-list-remove-level"
-                           style="margin: 1px;"
-                           value="<?php esc_attr_e( 'Remove', 'fwp' ); ?>"/>
+                        style="margin: 1px;"
+                        value="<?php esc_attr_e( 'Remove', 'fwp' ); ?>"/>
                 </td>
             </tr>
         </script>
-		<?php
-	}
+        <?php
+    }
 
 
-	/**
-	 * Output any front-end scripts
-	 */
-	function front_scripts() {
-		?>
+    /**
+     * Output any front-end scripts
+     */
+    function front_scripts() {
+        ?>
         <script>
             (function ($) {
 
@@ -396,24 +413,24 @@ class FacetWP_Facet_Range_List_Addon {
                 });
             })(jQuery);
         </script>
-		<?php
-	}
+        <?php
+    }
 
 
-	/**
-	 * Output admin settings HTML
-	 */
-	function settings_html() {
-		?>
+    /**
+     * Output admin settings HTML
+     */
+    function settings_html() {
+        ?>
         <tr class="range-list-add-level-wrap">
             <td></td>
             <td>
                 <input type="button"
-                       class="range-list-add-level button button-small"
-                       style="width: 200px;"
-                       value="<?php esc_attr_e( 'Add Range', 'fwp' ); ?>"/>
+                    class="range-list-add-level button button-small"
+                    style="width: 200px;"
+                    value="<?php esc_attr_e( 'Add Range', 'fwp' ); ?>"/>
             </td>
         </tr>
-		<?php
-	}
+        <?php
+    }
 }
