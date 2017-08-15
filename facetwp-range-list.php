@@ -214,7 +214,7 @@ class FacetWP_Facet_Range_List_Addon {
                     update_labels($this);
                 });
 
-                wp.hooks.addFilter('facetwp/save/range_list', function ($this, obj) {
+                wp.hooks.addFilter('facetwp/save/range_list', function (obj, $this) {
                     obj['source'] = $this.find('.facet-source').val();
                     obj['hierarchical'] = 'yes'; // locked
                     obj['operator'] = 'or'; // locked
