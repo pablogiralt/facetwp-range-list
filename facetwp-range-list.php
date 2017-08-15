@@ -40,20 +40,19 @@ class FacetWP_Facet_Range_List_Addon {
 
 		// Apply filtering (ignore the facet's current selection)
 		if ( isset( FWP()->or_values ) && ( 1 < count( FWP()->or_values ) || ! isset( FWP()->or_values[ $facet['name'] ] ) ) ) {
-			$post_ids = array();
+			$post_ids  = array();
 			$or_values = FWP()->or_values; // Preserve the original
 			unset( $or_values[ $facet['name'] ] );
 
 			$counter = 0;
 			foreach ( $or_values as $name => $vals ) {
 				$post_ids = ( 0 == $counter ) ? $vals : array_intersect( $post_ids, $vals );
-				$counter++;
+				$counter ++;
 			}
 
 			// Return only applicable results
 			$post_ids = array_intersect( $post_ids, FWP()->unfiltered_post_ids );
-		}
-		else {
+		} else {
 			$post_ids = FWP()->unfiltered_post_ids;
 		}
 
@@ -71,18 +70,19 @@ class FacetWP_Facet_Range_List_Addon {
 
 		$results = $wpdb->get_results( $sql, ARRAY_A );
 		$output  = array();
-		sort( $params['facet']['levels'] );
+		//sort( $params['facet']['levels'] );
 		// build groups.
-		foreach ( $params['facet']['levels'] as $level => $start ) {
-			$end = null;
-			if ( isset( $params['facet']['levels'][ $level + 1 ] ) ) {
-				$end = $params['facet']['levels'][ $level + 1 ] - 1;
-			}
-
+		foreach ( $params['facet']['levels'] as $level => $setting ) {
+			$min      = $this->get_range_value( 'min', $level, 'down', $params['facet']['levels'] );
+			$max      = $this->get_range_value( 'max', $level, 'up', $params['facet']['levels'] );
+			$label    = ( isset( $setting['label'] ) ? $setting['label'] : null );
 			$output[] = array(
-				'start'   => $start,
-				'end'     => $end,
-				'counter' => $this->get_counts( $results, $start, $end ),
+				'set'     => array(
+					'min' => $min,
+					'max' => $max,
+				),
+				'label'   => $label,
+				'counter' => $this->get_counts( $results, $min, $max ),
 			);
 		}
 
@@ -90,15 +90,40 @@ class FacetWP_Facet_Range_List_Addon {
 	}
 
 	/**
+	 * get the lowest value;
+	 */
+	function get_range_value( $type, $level, $direction, $levels ) {
+		$val = null;
+		if ( ! empty( $levels[ $level ][ $type ] ) ) {
+			$val = $levels[ $level ][ $type ];
+		} elseif ( $level > 0 && $level < count( $levels ) ) {
+			if ( $type === 'min' ) {
+				$type = 'max';
+			} else {
+				$type = 'min';
+			}
+			if ( $direction === 'up' ) {
+				$level = $level + 1;
+			} else {
+				$level = $level - 1;
+			}
+			$val = $this->get_range_value( $type, $level, $direction, $levels );
+		}
+
+		return $val;
+	}
+
+
+	/**
 	 * Filter out irrelevant choices
 	 */
 	function get_counts( $results, $start, $end ) {
-		$count = array();
+		$count = 0;// array();
 
 		foreach ( $results as $result ) {
 			if ( $result['facet_value'] >= $start ) {
 				if ( is_null( $end ) || $result['facet_value'] <= $end ) {
-					$count[] = $result;//+= 1;// (int) $result['counter'];
+					$count += 1;//$result;//+= 1;// (int) $result['counter'];
 				}
 			}
 		}
@@ -120,18 +145,26 @@ class FacetWP_Facet_Range_List_Addon {
 
 		foreach ( $values as $key => $result ) {
 
-			$display = $params['facet']['prefix'] . $this->formatNumber( $result['start'], $params['facet']['format'] ) . $params['facet']['suffix'];
-			$value    = $result['start'];
-			if ( ! empty( $result['end'] ) ) {
-			    $value .=  '-' . $result['end'];
-				$display .= ' to ' . $params['facet']['prefix'] . $this->formatNumber( $result['end'], $params['facet']['format'] ) . $params['facet']['suffix'];
+			$display = $result['label'];
+			if( !empty($result['set']['min'] ) && !empty($result['set']['max'] )){
+				$auto_display = implode(' - ', $result['set'] );
+				$value = implode('-', $result['set'] );
+			} elseif( empty($result['set']['min'] ) && !empty($result['set']['max'] )){
+				$auto_display = 'Up to ' . $result['set']['max'];
+				$value = '0-' . $result['set']['max'];
+			} elseif( !empty($result['set']['min'] ) && empty($result['set']['max'] )){
+				$auto_display = $result['set']['min'] . ' and up';
+				$value = $result['set']['min'] .'+';
 			}else{
-			    $display .= '+';
-            }
+				$auto_display = 'All';
+			}
+			if ( is_null( $display ) ) {
+                $display = $auto_display;
+			}
 			$selected = ( $value === $selected_value ) ? ' checked' : '';
-			$selected .= ( 0 == count( $result['counter'] ) && '' == $selected ) ? ' disabled' : '';
+			$selected .= ( 0 == $result['counter'] && '' == $selected ) ? ' disabled' : '';
 			$output   .= '<div class="facetwp-radio' . $selected . '" data-value="' . esc_attr( $value ) . '">';
-			$output   .= esc_html( $display ) . ' <span class="facetwp-counter">(' . count( $result['counter'] ) . ')</span>';
+			$output   .= esc_html( $display ) . ' <span class="facetwp-counter">(' . $result['counter'] . ')</span>';
 			$output   .= '</div>';
 		}
 
@@ -145,15 +178,15 @@ class FacetWP_Facet_Range_List_Addon {
 	function filter_posts( $params ) {
 		global $wpdb;
 
-		$facet = $params['facet'];
+		$facet           = $params['facet'];
 		$selected_values = $params['selected_values'];
 		$selected_values = array_pop( $selected_values );
-		$selected_values = explode('-', $selected_values );
-		$selected_values = array_map('floatval', $selected_values );
-		$sql = "
+		$selected_values = explode( '-', $selected_values );
+		$selected_values = array_map( 'floatval', $selected_values );
+		$sql             = "
         SELECT DISTINCT post_id FROM {$wpdb->prefix}facetwp_index
         WHERE facet_name = '{$facet['name']}' AND facet_value > $selected_values[0]";
-		if( !empty( $selected_values[1] ) ){
+		if ( ! empty( $selected_values[1] ) ) {
 			$sql .= " AND facet_value < $selected_values[1] ";
 		}
 
@@ -170,10 +203,6 @@ class FacetWP_Facet_Range_List_Addon {
             (function ($) {
                 wp.hooks.addAction('facetwp/load/range_list', function ($this, obj) {
                     $this.find('.facet-source').val(obj.source);
-                    $this.find('.facet-orderby').val(obj.orderby);
-                    $this.find('.facet-prefix').val(obj.prefix);
-                    $this.find('.facet-suffix').val(obj.suffix);
-                    $this.find('.facet-format').val(obj.format);
                     var wrap = $this.find('.range-list-add-level-wrap');
                     for (var l = 0; l < obj.levels.length; l++) {
                         create_label($this, obj.levels[l]);
@@ -182,47 +211,110 @@ class FacetWP_Facet_Range_List_Addon {
                         create_label($this);
                     }
                     $this.find('.range-list-level:first .button').remove();
+                    update_labels($this);
                 });
 
                 wp.hooks.addFilter('facetwp/save/range_list', function ($this, obj) {
                     obj['source'] = $this.find('.facet-source').val();
-                    obj['orderby'] = $this.find('.facet-orderby').val();
-                    obj['prefix'] = $this.find('.facet-prefix').val();
-                    obj['suffix'] = $this.find('.facet-suffix').val();
-                    obj['format'] = $this.find('.facet-format').val();
                     obj['hierarchical'] = 'yes'; // locked
                     obj['operator'] = 'or'; // locked
                     obj['levels'] = [];
-                    $this.find('.facet-start-level').each(function () {
-                        obj['levels'].push(this.value);
+                    $this.find('.facet-level-row').each(function () {
+                        var level = $(this),
+                            row = {
+                                'min': level.find('.facet-min-level').val(),
+                                'max': level.find('.facet-max-level').val(),
+                                'label': level.find('.facet-label').data('label'),
+                            };
+                        obj['levels'].push(row);
                     });
 
                     return obj;
                 });
 
                 function create_label($table, val) {
+
                     var $target = $table.find('.range-list-add-level-wrap');
                     var clone = $('#range-list-tpl').html();
 
-                    var num_labels = $table.find('.range-list-level').length;
+                    var num_labels = $table.find('.range-list-level').length + 1;
                     clone = clone.replace('{n}', num_labels);
 
                     var $tpl = $(clone);
 
                     if (val) {
-                        $tpl.find('.facet-start-level').val(val);
+                        $tpl.find('.facet-min-level').val(val.min);
+                        $tpl.find('.facet-max-level').val(val.max);
+                        if (val.label && val.label.length > 0) {
+                            $tpl.find('.facet-label').val(val.label).data('label', val.label);
+                        }
                     }
 
                     $tpl.insertBefore($target);
                 }
 
+                function find_loweset($row) {
+                    var prev_row = $row.parent().prev().find('.facet-level-row'),
+                        lower = prev_row.find('.facet-max-level'),
+                        val = 'Up';
+
+                    if (prev_row.length) {
+                        if (lower.val().length) {
+                            val = lower.val();
+                        } else {
+                            val = find_loweset(prev_row);
+                        }
+                    }
+                    return val;
+                }
+
+                function find_highest($row) {
+                    var next_row = $row.parent().next().find('.facet-level-row'),
+                        upper = next_row.find('.facet-min-level'),
+                        val = ' and Up';
+
+                    if (next_row.length) {
+                        if (upper.val().length) {
+                            val = ' - ' + upper.val();
+                        } else {
+                            val = find_highest(next_row);
+                        }
+                    }
+                    return val;
+                }
+
+                function update_labels($this) {
+                    var rows = $this.find('.facet-level-row');
+                    rows.each(function () {
+                        var row = $(this),
+                            label = row.find('.facet-label'),
+                            min = row.find('.facet-min-level').val().length ? row.find('.facet-min-level').val() : find_loweset(row),
+                            max = row.find('.facet-max-level').val().length ? ' - ' + row.find('.facet-max-level').val() : find_highest(row);
+                        if (!label.data('label')) {
+                            label.val(min + max)
+                        }
+                    })
+                }
+
                 $(document).on('click', '.range-list-add-level', function () {
                     var $table = $(this).closest('.facet-fields');
                     create_label($table);
-                });
+                    update_labels($(this).closest('.facetwp-row'));
 
+                });
                 $(document).on('click', '.range-list-remove-level', function () {
                     $(this).closest('.range-list-level').remove();
+                });
+                $(document).on('input', '.facet-label', function () {
+                    var label = $(this);
+                    if (label.val().length > 0) {
+                        label.data('label', label.val());
+                    } else {
+                        label.data('label', false);
+                    }
+                });
+                $(document).on('input', '.facet-min-level, .facet-max-level', function () {
+                    update_labels($(this).closest('.facetwp-row'));
                 });
             })(jQuery);
         </script>
@@ -237,10 +329,16 @@ class FacetWP_Facet_Range_List_Addon {
                         </div>
                     </div>
                 </td>
-                <td>
-                    <input type="number" class="facet-start-level" value=""
-                           placeholder="<?php esc_attr_e( 'Starting Value', 'fwp' ); ?>"
-                           style="width: 125px;"/>
+                <td class="facet-level-row">
+                    <input type="number" class="facet-min-level" value=""
+                           placeholder="<?php esc_attr_e( 'Min Value', 'fwp' ); ?>"
+                           style="width: 115px;"/>
+                    <input type="number" class="facet-max-level" value=""
+                           placeholder="<?php esc_attr_e( 'Max Value', 'fwp' ); ?>"
+                           style="width: 115px;"/>
+                    <input type="text" class="facet-label" value=""
+                           placeholder="<?php esc_attr_e( 'Label', 'fwp' ); ?>"
+                           style="width: 115px;"/>
                     <input type="button" class="button range-list-remove-level"
                            style="margin: 1px;"
                            value="<?php esc_attr_e( 'Remove', 'fwp' ); ?>"/>
@@ -298,68 +396,7 @@ class FacetWP_Facet_Range_List_Addon {
 	 * Output admin settings HTML
 	 */
 	function settings_html() {
-		$thousands = FWP()->helper->get_setting( 'thousands_separator' );
-		$decimal   = FWP()->helper->get_setting( 'decimal_separator' );
 		?>
-        <tr>
-            <td><?php _e( 'Sort by', 'fwp' ); ?>:</td>
-            <td>
-                <select class="facet-orderby">
-                    <option value="count"><?php _e( 'Highest Count', 'fwp' ); ?></option>
-                    <option value="display_value"><?php _e( 'Display Value', 'fwp' ); ?></option>
-                    <option value="raw_value"><?php _e( 'Raw Value', 'fwp' ); ?></option>
-                </select>
-            </td>
-        </tr>
-        <tr>
-            <td>
-				<?php _e( 'Prefix', 'fwp' ); ?>:
-                <div class="facetwp-tooltip">
-                    <span class="icon-question">?</span>
-                    <div class="facetwp-tooltip-content"><?php _e( 'Text that appears before each slider value', 'fwp' ); ?></div>
-                </div>
-            </td>
-            <td><input type="text" class="facet-prefix" value=""/></td>
-        </tr>
-        <tr>
-            <td>
-				<?php _e( 'Suffix', 'fwp' ); ?>:
-                <div class="facetwp-tooltip">
-                    <span class="icon-question">?</span>
-                    <div class="facetwp-tooltip-content"><?php _e( 'Text that appears after each slider value', 'fwp' ); ?></div>
-                </div>
-            </td>
-            <td><input type="text" class="facet-suffix" value=""/></td>
-        </tr>
-        <tr>
-            <td>
-				<?php _e( 'Format', 'fwp' ); ?>:
-                <div class="facetwp-tooltip">
-                    <span class="icon-question">?</span>
-                    <div class="facetwp-tooltip-content"><?php _e( 'The number format', 'fwp' ); ?></div>
-                </div>
-            </td>
-            <td>
-                <select class="facet-format">
-					<?php if ( '' != $thousands ) : ?>
-                        <option value="0,0">5<?php echo $thousands; ?>280
-                        </option>
-                        <option value="0,0.0">5<?php echo $thousands; ?>
-                            280<?php echo $decimal; ?>4
-                        </option>
-                        <option value="0,0.00">5<?php echo $thousands; ?>
-                            280<?php echo $decimal; ?>42
-                        </option>
-					<?php endif; ?>
-                    <option value="0">5280</option>
-                    <option value="0.0">5280<?php echo $decimal; ?>4</option>
-                    <option value="0.00">5280<?php echo $decimal; ?>42</option>
-                    <option value="0a">5k</option>
-                    <option value="0.0a">5<?php echo $decimal; ?>3k</option>
-                    <option value="0.00a">5<?php echo $decimal; ?>28k</option>
-                </select>
-            </td>
-        </tr>
         <tr class="range-list-add-level-wrap">
             <td></td>
             <td>
@@ -381,6 +418,7 @@ class FacetWP_Facet_Range_List_Addon {
 
 		return round( $value, $precision );
 	}
+
 	/**
 	 * Port of the format number method from nummy.js
 	 */
@@ -442,10 +480,10 @@ class FacetWP_Facet_Range_List_Addon {
 
 		$output = ( $negative ? '-' : '' ) . $wholeStr . $decimalStr . $abbr;
 
-		$output = preg_replace("/\./", '{d}',$output);
-		$output = preg_replace("/\,/", '{t}',$output);
-		$output = preg_replace("/{d}/", ',', $output);
-		$output = preg_replace("/{t}/", ',', $output);
+		$output = preg_replace( "/\./", '{d}', $output );
+		$output = preg_replace( "/\,/", '{t}', $output );
+		$output = preg_replace( "/{d}/", ',', $output );
+		$output = preg_replace( "/{t}/", ',', $output );
 
 		return $output;
 	}
