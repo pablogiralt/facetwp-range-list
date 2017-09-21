@@ -145,6 +145,7 @@ class FacetWP_Facet_Range_List_Addon {
         $output = '';
         $values = (array) $params['values'];
         $selected_values = (array) $params['selected_values'];
+        $selected_value = '';
 
         if ( ! empty( $selected_values ) ) {
             $selected_value = $selected_values[0];
