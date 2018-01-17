@@ -197,18 +197,11 @@ class FacetWP_Facet_Range_List_Addon {
         $selected_values = explode( '-', $selected_values );
         $selected_values = array_map( 'floatval', $selected_values );
 
-        //romain
-        // $sql = "
-        // SELECT DISTINCT post_id FROM {$wpdb->prefix}facetwp_index
-        // WHERE facet_name = '{$facet['name']}' AND facet_value > $selected_values[0]";
-
         $sql = "
         SELECT DISTINCT post_id FROM {$wpdb->prefix}facetwp_index
         WHERE facet_name = '{$facet['name']}' AND facet_value >= $selected_values[0]";
 
         if ( ! empty( $selected_values[1] ) ) {
-            //romain
-            //$sql .= " AND facet_value < $selected_values[1] ";
             $sql .= " AND facet_value <= $selected_values[1] ";
         }
 
