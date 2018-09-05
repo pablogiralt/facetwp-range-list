@@ -122,18 +122,18 @@ class FacetWP_Facet_Range_List_Addon extends FacetWP_Facet
                 $value = implode('-', $result['set'] );
             }
             elseif ( empty( $result['set']['min'] ) && ! empty( $result['set']['max'] ) ) {
-                $auto_display = 'Up to ' . $result['set']['max'];
+                $auto_display = sprintf(__('Up to %s', 'fwp'), $result['set']['max']);
                 $value = '0-' . $result['set']['max'];
             }
             elseif ( ! empty($result['set']['min'] ) && empty( $result['set']['max'] ) ) {
-                $auto_display = $result['set']['min'] . ' and up';
+                $auto_display = sprintf(__('%s and up', 'fwp'), $result['set']['min']);
                 $value = $result['set']['min'] . '+';
             }
             else {
-                $auto_display = 'All';
+                $auto_display = __('All', 'fwp');
             }
 
-            if ( is_null( $display ) ) {
+            if ( is_null( $display ) || ! $display ) {
                 $display = $auto_display;
             }
 
